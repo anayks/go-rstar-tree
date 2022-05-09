@@ -1,3 +1,3 @@
-module github.com/dhconnelly/rtreego
+module github.com/anayks/go-rstar-tree
 
-go 1.13
+go 1.17
