@@ -337,6 +337,10 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			q: make(Point, dim),
 		}
 
+		if len(v.bb.p) < dim {
+			panic(DimError{dim, len(v.bb.p)})
+		}
+
 		for i := range e.bb.p {
 			newBB.p[i] = math.Min(e.bb.p[i], v.bb.p[i])
 			newBB.q[i] = math.Min(e.bb.q[i], v.bb.q[i])
