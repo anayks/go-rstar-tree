@@ -282,23 +282,118 @@ func (tree *Rtree) insert(e entry, level int) {
 
 // chooseNode finds the node at the specified level to which e should be added.
 func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
-	if n.leaf || n.level == level {
+	if n.leaf {
 		return n
 	}
 
-	// find the entry whose bb needs least enlargement to include obj
-	diff := math.MaxFloat64
-	var chosen entry
-	for _, en := range n.entries {
-		bb := boundingBox(en.bb, e.bb)
-		d := bb.Size() - en.bb.Size()
-		if d < diff || (d == diff && en.bb.Size() < chosen.bb.Size()) {
-			diff = d
-			chosen = en
+	var minOverlaps []*entry // минимальная площадь покрытия
+	var minBBs []*entry      // минимальный размер
+
+	minOverlap := math.MaxFloat64
+
+	if n.entries[0].child.leaf {
+		for _, v := range n.entries {
+			overlap := boundingBox(v.bb, e.bb)
+			d := overlap.Size() - v.bb.Overlap(e.bb)
+
+			if d > minOverlap {
+				continue
+			}
+
+			if d == minOverlap {
+				minOverlaps = append(minOverlaps, &v)
+				continue
+			}
+
+			minOverlap = d
+
+			if len(minOverlaps) == 1 {
+				minOverlaps[0] = &v
+				continue
+			}
+
+			minOverlaps = make([]*entry, 1)
+			minOverlaps[0] = &v
+		}
+
+		if len(minOverlaps) == 1 {
+			nn := minOverlaps[0]
+			return tree.chooseNode(nn.child, e, level)
+		}
+	} else {
+		minOverlaps = make([]*entry, len(n.entries))
+		for _, v := range n.entries {
+			minOverlaps = append(minOverlaps, &v)
 		}
 	}
 
-	return tree.chooseNode(chosen.child, e, level)
+	dSpace := math.MaxFloat64
+
+	for _, v := range minOverlaps {
+		dim := len(e.bb.p)
+
+		newBB := Rect{
+			p: make(Point, dim),
+			q: make(Point, dim),
+		}
+
+		for i := range e.bb.p {
+			newBB.p[i] = math.Min(e.bb.p[i], v.bb.p[i])
+			newBB.q[i] = math.Min(e.bb.q[i], v.bb.q[i])
+		}
+
+		d := boundingBox(v.bb, &newBB).Size() - v.child.computeBoundingBox().Size()
+
+		if d > dSpace {
+			continue
+		}
+
+		if d == dSpace {
+			minBBs = append(minBBs, v)
+			continue
+		}
+
+		if len(minBBs) == 1 {
+			minBBs[0] = v
+			continue
+		}
+
+		minBBs = make([]*entry, 1)
+		minBBs[0] = v
+	}
+
+	if len(minBBs) == 1 {
+		nn := minBBs[0]
+		return tree.chooseNode(nn.child, e, level)
+	} else {
+		dSpace = math.MaxFloat64
+		var searched entry
+
+		for _, v := range minBBs {
+			size := v.child.computeBoundingBox().Size()
+
+			if size < dSpace {
+				searched = *v
+				dSpace = size
+			}
+		}
+
+		return tree.chooseNode(searched.child, e, level)
+	}
+
+	// // find the entry whose bb needs least enlargement to include obj
+	// diff := math.MaxFloat64
+	// var chosen entry
+	// for _, en := range n.entries {
+	// 	bb := boundingBox(en.bb, e.bb)
+	// 	d := bb.Size() - en.bb.Size()
+	// 	if d < diff || (d == diff && en.bb.Size() < chosen.bb.Size()) {
+	// 		diff = d
+	// 		chosen = en
+	// 	}
+	// }
+
+	// return tree.chooseNode(chosen.child, e, level)
 }
 
 // adjustTree splits overflowing nodes and propagates the changes upwards.

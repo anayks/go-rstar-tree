@@ -69,6 +69,25 @@ func (p Point) minDist(r *Rect) float64 {
 	return sum
 }
 
+// Overlap computes the overlaping of two rectangles.
+// If some difference of any less then 0, result is 0
+func (r1 *Rect) Overlap(r2 *Rect) (res float64) {
+	dim := len(r1.p)
+	diffs := make([]float64, dim)
+	for i := 0; i < dim; i++ {
+		result := math.Min(r1.q[i], r2.q[i]) - math.Max(r1.p[i], r2.p[i])
+		if result <= 0 {
+			return 0
+		}
+		diffs = append(diffs, result)
+	}
+	res = 1
+	for _, v := range diffs {
+		res = res * v
+	}
+	return res
+}
+
 // minMaxDist computes the minimum of the maximum distances from p to points
 // on r.  If r is the bounding box of some geometric objects, then there is
 // at least one object contained in r within minMaxDist(p, r) of p.
