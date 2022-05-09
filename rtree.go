@@ -722,15 +722,17 @@ func (tree *Rtree) searchIntersect(results []Spatial, n *node, bb *Rect, filters
 	if !n.leaf {
 		for _, v := range n.entries {
 			if intersect(bb, v.bb) {
-				return tree.searchIntersect(results, v.child, bb, filters)
+				tree.searchIntersect(results, v.child, bb, filters)
 			}
 		}
 	} else {
 		for _, v := range n.entries {
-			if v.obj == nil {
-				continue
+			if intersect(bb, v.bb) {
+				if v.obj == nil {
+					continue
+				}
+				results = append(results, v.obj)
 			}
-			results = append(results, v.obj)
 		}
 	}
 	return results
