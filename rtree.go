@@ -286,8 +286,8 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 		return n
 	}
 
-	var minOverlaps []*entry // минимальная площадь покрытия
-	var minBBs []*entry      // минимальный размер
+	var minOverlaps []entry // минимальная площадь покрытия
+	var minBBs []entry      // минимальный размер
 
 	minOverlap := math.MaxFloat64
 
@@ -301,19 +301,19 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			}
 
 			if d == minOverlap {
-				minOverlaps = append(minOverlaps, &v)
+				minOverlaps = append(minOverlaps, v)
 				continue
 			}
 
 			minOverlap = d
 
 			if len(minOverlaps) == 1 {
-				minOverlaps[0] = &v
+				minOverlaps[0] = v
 				continue
 			}
 
-			minOverlaps = make([]*entry, 1)
-			minOverlaps[0] = &v
+			minOverlaps = make([]entry, 1)
+			minOverlaps[0] = v
 		}
 
 		if len(minOverlaps) == 1 {
@@ -321,9 +321,9 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			return tree.chooseNode(nn.child, e, level)
 		}
 	} else {
-		minOverlaps = make([]*entry, len(n.entries))
+		minOverlaps = make([]entry, len(n.entries))
 		for _, v := range n.entries {
-			minOverlaps = append(minOverlaps, &v)
+			minOverlaps = append(minOverlaps, v)
 		}
 	}
 
@@ -362,7 +362,7 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			continue
 		}
 
-		minBBs = make([]*entry, 1)
+		minBBs = make([]entry, 1)
 		minBBs[0] = v
 	}
 
@@ -377,7 +377,7 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			size := v.child.computeBoundingBox().Size()
 
 			if size < dSpace {
-				searched = *v
+				searched = v
 				dSpace = size
 			}
 		}
