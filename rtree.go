@@ -308,12 +308,13 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			minOverlap = d
 
 			if len(minOverlaps) == 1 {
-				minOverlaps[0] = v
+				minOverlaps = make([]entry, 0)
+				minOverlaps = append(minOverlaps, v)
 				continue
 			}
 
-			minOverlaps = make([]entry, 1)
-			minOverlaps[0] = v
+			minOverlaps = make([]entry, 0)
+			minOverlaps = append(minOverlaps, v)
 		}
 
 		if len(minOverlaps) == 1 {
@@ -321,10 +322,7 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			return tree.chooseNode(nn.child, e, level)
 		}
 	} else {
-		minOverlaps = make([]entry, len(n.entries))
-		for _, v := range n.entries {
-			minOverlaps = append(minOverlaps, v)
-		}
+		minOverlaps = append(minOverlaps, n.entries...)
 	}
 
 	dSpace := math.MaxFloat64
