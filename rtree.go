@@ -700,7 +700,7 @@ func (tree *Rtree) condenseTree(n *node) {
 // Implemented per Section 3.1 of "R-trees: A Dynamic Index Structure for
 // Spatial Searching" by A. Guttman, Proceedings of ACM SIGMOD, p. 47-57, 1984.
 func (tree *Rtree) SearchIntersect(bb *Rect, filters ...Filter) []Spatial {
-	return tree.searchIntersect([]Spatial{}, tree.root, bb, filters)
+	return tree.searchIntersect([]Spatial{}, tree.root, bb)
 }
 
 // SearchIntersectWithLimit is similar to SearchIntersect, but returns
