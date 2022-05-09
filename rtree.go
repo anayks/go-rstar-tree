@@ -727,6 +727,9 @@ func (tree *Rtree) searchIntersect(results []Spatial, n *node, bb *Rect, filters
 		}
 	} else {
 		for _, v := range n.entries {
+			if v.obj == nil {
+				continue
+			}
 			results = append(results, v.obj)
 		}
 	}
