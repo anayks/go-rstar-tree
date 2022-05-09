@@ -719,23 +719,15 @@ func (tree *Rtree) SearchIntersectWithLimit(k int, bb *Rect) []Spatial {
 }
 
 func (tree *Rtree) searchIntersect(results []Spatial, n *node, bb *Rect, filters []Filter) []Spatial {
-	for _, e := range n.entries {
-		if !intersect(e.bb, bb) {
-			continue
+	if !n.leaf {
+		for _, v := range n.entries {
+			if intersect(bb, v.bb) {
+				return tree.searchIntersect(results, v.child, bb, filters)
+			}
 		}
-
-		if !n.leaf {
-			results = tree.searchIntersect(results, e.child, bb, filters)
-			continue
-		}
-
-		refuse, abort := applyFilters(results, e.obj, filters)
-		if !refuse {
-			results = append(results, e.obj)
-		}
-
-		if abort {
-			break
+	} else {
+		for _, v := range n.entries {
+			results = append(results, v.obj)
 		}
 	}
 	return results
