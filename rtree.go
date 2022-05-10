@@ -18,6 +18,13 @@ func defaultComparator(obj1, obj2 Spatial) bool {
 	return obj1 == obj2
 }
 
+type Bound int
+
+const (
+	LeftBound  Bound = 0
+	RightBound Bound = 1
+)
+
 // Rtree represents an R-tree, a balanced search tree for storing and querying
 // spatial objects.  Dim specifies the number of spatial dimensions and
 // MinChildren/MaxChildren specify the minimum/maximum branching factors.
@@ -250,38 +257,47 @@ func (tree *Rtree) Insert(obj Spatial) {
 
 // insert adds the specified entry to the tree at the specified level.
 func (tree *Rtree) insert(e entry, level int) {
-	leaf := tree.chooseNode(tree.root, e, level)
-	leaf.entries = append(leaf.entries, e)
 
-	// update parent pointer if necessary
-	if e.child != nil {
-		e.child.parent = leaf
+	node := tree.root
+	node = tree.chooseTree(node, e, level)
+
+	if len(node.entries) < tree.MaxChildren {
+		node.entries = append(node.entries, e)
+		return
 	}
 
-	// split leaf if overflows
-	var split *node
-	if len(leaf.entries) > tree.MaxChildren {
-		leaf, split = leaf.split(tree.MinChildren)
-	}
-	root, splitRoot := tree.adjustTree(leaf, split)
-	if splitRoot != nil {
-		oldRoot := root
-		tree.height++
-		tree.root = &node{
-			parent: nil,
-			level:  tree.height,
-			entries: []entry{
-				{bb: oldRoot.computeBoundingBox(), child: oldRoot},
-				{bb: splitRoot.computeBoundingBox(), child: splitRoot},
-			},
-		}
-		oldRoot.parent = tree.root
-		splitRoot.parent = tree.root
-	}
+	tree.splitNodeRStarByObject(node, e)
+
+	// leaf.entries = append(leaf.entries, e)
+
+	// // update parent pointer if necessary
+	// if e.child != nil {
+	// 	e.child.parent = leaf
+	// }
+
+	// // split leaf if overflows
+	// var split *node
+	// if len(leaf.entries) > tree.MaxChildren {
+	// 	leaf, split = leaf.split(tree.MinChildren)
+	// }
+	// root, splitRoot := tree.adjustTree(leaf, split)
+	// if splitRoot != nil {
+	// 	oldRoot := root
+	// 	tree.height++
+	// 	tree.root = &node{
+	// 		parent: nil,
+	// 		level:  tree.height,
+	// 		entries: []entry{
+	// 			{bb: oldRoot.computeBoundingBox(), child: oldRoot},
+	// 			{bb: splitRoot.computeBoundingBox(), child: splitRoot},
+	// 		},
+	// 	}
+	// 	oldRoot.parent = tree.root
+	// 	splitRoot.parent = tree.root
+	// }
 }
 
-// chooseNode finds the node at the specified level to which e should be added.
-func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
+func (tree *Rtree) chooseTree(n *node, e entry, level int) *node {
 	if n.leaf {
 		return n
 	}
@@ -319,7 +335,7 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 
 		if len(minOverlaps) == 1 {
 			nn := minOverlaps[0]
-			return tree.chooseNode(nn.child, e, level)
+			tree.chooseTree(nn.child, e, level)
 		}
 	} else {
 		minOverlaps = append(minOverlaps, n.entries...)
@@ -366,7 +382,8 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 
 	if len(minBBs) == 1 {
 		nn := minBBs[0]
-		return tree.chooseNode(nn.child, e, level)
+
+		return tree.chooseTree(nn.child, e, level)
 	} else {
 		dSpace = math.MaxFloat64
 		var searched entry
@@ -380,7 +397,7 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 			}
 		}
 
-		return tree.chooseNode(searched.child, e, level)
+		return tree.chooseTree(searched.child, e, level)
 	}
 
 	// // find the entry whose bb needs least enlargement to include obj
@@ -398,34 +415,564 @@ func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
 	// return tree.chooseNode(chosen.child, e, level)
 }
 
-// adjustTree splits overflowing nodes and propagates the changes upwards.
-func (tree *Rtree) adjustTree(n, nn *node) (*node, *node) {
-	// Let the caller handle root adjustments.
+// chooseNode finds the node at the specified level to which e should be added.
+// func (tree *Rtree) chooseNode(n *node, e entry, level int) *node {
+// 	tree.root = n
+
+// 	if n.leaf {
+// 		return n
+// 	}
+
+// 	var minOverlaps []entry // минимальная площадь покрытия
+// 	var minBBs []entry      // минимальный размер
+
+// 	minOverlap := math.MaxFloat64
+
+// 	if n.entries[0].child.leaf {
+// 		for _, v := range n.entries {
+// 			overlap := boundingBox(v.bb, e.bb)
+// 			d := overlap.Size() - v.bb.Overlap(e.bb)
+
+// 			if d > minOverlap {
+// 				continue
+// 			}
+
+// 			if d == minOverlap {
+// 				minOverlaps = append(minOverlaps, v)
+// 				continue
+// 			}
+
+// 			minOverlap = d
+
+// 			if len(minOverlaps) == 1 {
+// 				minOverlaps = make([]entry, 0)
+// 				minOverlaps = append(minOverlaps, v)
+// 				continue
+// 			}
+
+// 			minOverlaps = make([]entry, 0)
+// 			minOverlaps = append(minOverlaps, v)
+// 		}
+
+// 		if len(minOverlaps) == 1 {
+// 			nn := minOverlaps[0]
+// 			return tree.chooseNode(nn.child, e, level)
+// 		}
+// 	} else {
+// 		minOverlaps = append(minOverlaps, n.entries...)
+// 	}
+
+// 	dSpace := math.MaxFloat64
+
+// 	for _, v := range minOverlaps {
+// 		dim := len(e.bb.p)
+
+// 		newBB := Rect{
+// 			p: make(Point, dim),
+// 			q: make(Point, dim),
+// 		}
+
+// 		if len(v.bb.p) < dim {
+// 			panic(DimError{dim, len(v.bb.p)})
+// 		}
+
+// 		for i := range e.bb.p {
+// 			newBB.p[i] = math.Min(e.bb.p[i], v.bb.p[i])
+// 			newBB.q[i] = math.Min(e.bb.q[i], v.bb.q[i])
+// 		}
+
+// 		d := boundingBox(v.bb, &newBB).Size() - v.child.computeBoundingBox().Size()
+
+// 		if d > dSpace {
+// 			continue
+// 		}
+
+// 		if d == dSpace {
+// 			minBBs = append(minBBs, v)
+// 			continue
+// 		}
+
+// 		if len(minBBs) == 1 {
+// 			minBBs[0] = v
+// 			continue
+// 		}
+
+// 		minBBs = make([]entry, 1)
+// 		minBBs[0] = v
+// 	}
+
+// 	if len(minBBs) == 1 {
+// 		nn := minBBs[0]
+// 		return tree.chooseNode(nn.child, e, level)
+// 	} else {
+// 		dSpace = math.MaxFloat64
+// 		var searched entry
+
+// 		for _, v := range minBBs {
+// 			size := v.child.computeBoundingBox().Size()
+
+// 			if size < dSpace {
+// 				searched = v
+// 				dSpace = size
+// 			}
+// 		}
+
+// 		return tree.chooseNode(searched.child, e, level)
+// 	}
+
+// // find the entry whose bb needs least enlargement to include obj
+// diff := math.MaxFloat64
+// var chosen entry
+// for _, en := range n.entries {
+// 	bb := boundingBox(en.bb, e.bb)
+// 	d := bb.Size() - en.bb.Size()
+// 	if d < diff || (d == diff && en.bb.Size() < chosen.bb.Size()) {
+// 		diff = d
+// 		chosen = en
+// 	}
+// }
+
+// return tree.chooseNode(chosen.child, e, level)
+// }
+
+func (tree *Rtree) QuickSort(list *[]entry, Lowest, Higher int, axe int, bound Bound) {
+	Low := Lowest
+	High := Higher
+
+	var T entry
+
+	var Mid float64
+
+	switch bound {
+	case LeftBound:
+		{
+			Mid = (*list)[(Low+High)/2].bb.p[axe]
+		}
+	case RightBound:
+		{
+			Mid = (*list)[(Low+High)/2].bb.q[axe]
+		}
+	}
+
+	input := true
+
+	for ok := true; ok; ok = input {
+		switch bound {
+		case LeftBound:
+			{
+				for (*list)[Low].bb.p[axe] < Mid {
+					Low++
+				}
+
+				for (*list)[High].bb.p[axe] > Mid {
+					High--
+				}
+			}
+		case RightBound:
+			{
+				for (*list)[Low].bb.q[axe] < Mid {
+					Low++
+				}
+				for (*list)[High].bb.q[axe] > Mid {
+					High--
+				}
+			}
+		}
+
+		if Low <= High {
+			T = (*list)[Low]
+			(*list)[Low] = (*list)[High]
+			(*list)[High] = T
+			Low++
+			High--
+		}
+
+		if Low > High {
+			input = false
+		}
+	}
+
+	if High > Lowest {
+		tree.QuickSort(list, Lowest, High, axe, bound)
+	}
+	if Low < Higher {
+		tree.QuickSort(list, Low, Higher, axe, bound)
+	}
+}
+
+// // adjustTree splits overflowing nodes and propagates the changes upwards.
+// func (tree *Rtree) adjustTree(n, nn *node) (*node, *node) {
+// 	// Let the caller handle root adjustments.
+// 	if n == tree.root {
+// 		return n, nn
+// 	}
+
+// 	// Re-size the bounding box of n to account for lower-level changes.
+// 	en := n.getEntry()
+// 	en.bb = n.computeBoundingBox()
+
+// 	// If nn is nil, then we're just propagating changes upwards.
+// 	if nn == nil {
+// 		return tree.adjustTree(n.parent, nil)
+// 	}
+
+// 	// Otherwise, these are two nodes resulting from a split.
+// 	// n was reused as the "left" node, but we need to add nn to n.parent.
+// 	enn := entry{nn.computeBoundingBox(), nn, nil}
+// 	n.parent.entries = append(n.parent.entries, enn)
+
+// 	// If the new entry overflows the parent, split the parent and propagate.
+// 	if len(n.parent.entries) > tree.MaxChildren {
+// 		return tree.adjustTree(n.parent.split(tree.MinChildren))
+// 	}
+
+// 	// Otherwise keep propagating changes upwards.
+// 	return tree.adjustTree(n.parent, nil)
+// }
+
+func (tree *Rtree) chooseSplitAxisByEntry(obj entry, n *node) (result int) {
+	arrNode := make([]entry, tree.MaxChildren+1)
+
+	if !n.leaf {
+		return result
+	}
+
+	copy(arrNode, n.entries)
+
+	arrNode[tree.MaxChildren] = obj
+
+	node1 := &node{}
+	node2 := &node{}
+
+	perimeter_min := math.MaxFloat64
+	dim := len(n.getEntry().bb.p)
+
+	for i := 0; i < dim; i++ {
+		var perimeter float64
+
+		for j := 0; j <= 1; j++ {
+			tree.QuickSort(&arrNode, 0, tree.MaxChildren, i, Bound(j))
+
+			for k := 1; k <= tree.MaxChildren-tree.MinChildren*2+2; k++ {
+				idx := 0
+
+				for idx < ((tree.MinChildren - 1) + k) {
+					node1.entries = append(node1.entries, arrNode[idx])
+					idx++
+				}
+
+				for i := range arrNode[idx:] {
+					node2.entries = append(node2.entries, arrNode[i])
+				}
+
+				perimeter = perimeter + node1.computeBoundingBox().margin() + node2.computeBoundingBox().margin()
+			}
+		}
+
+		if perimeter <= perimeter_min {
+			result = i
+			perimeter_min = perimeter
+		}
+	}
+
+	return result
+}
+
+func (tree *Rtree) chooseSplitAxis(n, nn *node, enn *entry) (result int) {
+	if !n.leaf {
+		return result
+	}
+
+	arrNode := make([]entry, tree.MaxChildren+1)
+
+	copy(arrNode, n.entries)
+
+	if enn == nil {
+		arrNode[tree.MaxChildren] = *nn.getEntry()
+	} else {
+		arrNode[tree.MaxChildren] = *enn
+	}
+
+	node1 := &node{}
+	node2 := &node{}
+
+	perimeter_min := math.MaxFloat64
+	dim := len(nn.getEntry().bb.p)
+
+	for i := 0; i < dim; i++ {
+		var perimeter float64
+
+		for j := 0; j <= 1; j++ {
+			tree.QuickSort(&arrNode, 0, tree.MaxChildren, i, Bound(j))
+
+			for k := 1; k <= tree.MaxChildren-tree.MinChildren*2+2; k++ {
+				idx := 0
+
+				for idx < ((tree.MinChildren - 1) + k) {
+					node1.entries = append(node1.entries, arrNode[idx])
+					idx++
+				}
+
+				for i := range arrNode[idx:] {
+					node2.entries = append(node2.entries, arrNode[i])
+				}
+
+				perimeter = perimeter + node1.computeBoundingBox().margin() + node2.computeBoundingBox().margin()
+			}
+		}
+
+		if perimeter <= perimeter_min {
+			result = i
+			perimeter_min = perimeter
+		}
+	}
+
+	return result
+}
+
+func (tree *Rtree) splitNodeRStar(n *node, nn *node) {
+	if n.leaf {
+		return
+	}
+
+	var parent, newChild *node
+	var arrNode []entry
+
 	if n == tree.root {
-		return n, nn
+		parent = &node{}
+		n.parent = parent
+		parent.entries = append(parent.entries, entry{
+			bb:    n.computeBoundingBox(),
+			child: n,
+		})
+		parent.level = tree.root.level + 1
+		tree.root = parent
+		tree.root.leaf = false
+		tree.height++
+	} else {
+		parent = n.parent
 	}
 
-	// Re-size the bounding box of n to account for lower-level changes.
-	en := n.getEntry()
-	en.bb = n.computeBoundingBox()
+	arrNode = make([]entry, tree.MaxChildren+1)
 
-	// If nn is nil, then we're just propagating changes upwards.
-	if nn == nil {
-		return tree.adjustTree(n.parent, nil)
+	copy(arrNode, n.entries)
+
+	nEntry := entry{nn.computeBoundingBox(), nn, nil}
+
+	arrNode[len(arrNode)-1] = nEntry
+
+	node1min := &node{}
+	node2min := &node{}
+
+	node1 := &node{}
+	node2 := &node{}
+
+	axe := tree.chooseSplitAxis(n, nn, &nEntry)
+
+	areaOverlapMin := math.MaxFloat64
+	areaMin := math.MaxFloat64
+
+	for i := 0; i < 1; i++ {
+		tree.QuickSort(&arrNode, 0, len(arrNode)-1, axe, Bound(i))
+
+		for k := tree.MinChildren - 1; k <= tree.MaxChildren-tree.MinChildren; k++ {
+			j := 0
+
+			node1.entries = make([]entry, 0)
+			node2.entries = make([]entry, 0)
+
+			for j <= k {
+				node1.entries = append(node1.entries, arrNode[j])
+				j++
+			}
+
+			for j := k; j < len(arrNode)-1; j++ {
+				node2.entries = append(node2.entries, arrNode[j+1])
+			}
+
+			areaOverlap := node1.computeBoundingBox().Overlap(node2.computeBoundingBox())
+
+			if areaOverlap > areaOverlapMin {
+				continue
+			}
+
+			if areaOverlap < areaOverlapMin {
+				node1min = node1
+				node2min = node2
+
+				areaOverlapMin = areaOverlap
+				continue
+			}
+
+			area := node1.computeBoundingBox().Size() + node2.computeBoundingBox().Size()
+
+			if area >= areaMin {
+				continue
+			}
+
+			node1min = node1
+			node2min = node2
+			areaMin = area
+		}
 	}
 
-	// Otherwise, these are two nodes resulting from a split.
-	// n was reused as the "left" node, but we need to add nn to n.parent.
-	enn := entry{nn.computeBoundingBox(), nn, nil}
-	n.parent.entries = append(n.parent.entries, enn)
+	node1min.level = nn.level
+	node2min.level = nn.level
 
-	// If the new entry overflows the parent, split the parent and propagate.
-	if len(n.parent.entries) > tree.MaxChildren {
-		return tree.adjustTree(n.parent.split(tree.MinChildren))
+	n.copy(node1min)
+	n.parent = parent
+
+	newChild = &node{}
+	newChild.copy(node2min)
+	newChild.parent = parent
+
+	for _, v := range newChild.entries {
+		v.child.parent = newChild
 	}
 
-	// Otherwise keep propagating changes upwards.
-	return tree.adjustTree(n.parent, nil)
+	if len(parent.entries) < tree.MaxChildren {
+		newEntry := entry{newChild.computeBoundingBox(), newChild, nil}
+		parent.entries = append(parent.entries, newEntry)
+		n.getEntry().bb = newChild.computeBoundingBox()
+		newChild.getEntry().bb = newChild.computeBoundingBox()
+	} else {
+		tree.splitNodeRStar(parent, newChild)
+	}
+}
+
+func (tree *Rtree) splitNodeRStarByObject(n *node, e entry) {
+	if !n.leaf {
+		return
+	}
+
+	var parent, newChild *node
+	var arrNode []entry
+
+	if n == tree.root {
+		parent = &node{}
+		n.parent = parent
+		parent.entries = append(parent.entries, entry{
+			bb:    n.computeBoundingBox(),
+			child: n,
+		})
+		parent.level = tree.root.level + 1
+		tree.root = parent
+		tree.root.leaf = false
+		tree.height++
+	} else {
+		parent = n.parent
+	}
+
+	arrNode = make([]entry, tree.MaxChildren+1)
+
+	copy(arrNode, n.entries)
+
+	arrNode[tree.MaxChildren] = e
+
+	node1min := &node{}
+	node2min := &node{}
+
+	node1 := &node{}
+	node2 := &node{}
+
+	axe := tree.chooseSplitAxisByEntry(e, n)
+
+	areaOverlapMin := math.MaxFloat64
+	areaMin := math.MaxFloat64
+
+	// dim := len(n.getEntry().bb.p)
+
+	for i := 0; i < 1; i++ {
+		tree.QuickSort(&arrNode, 0, len(arrNode)-1, axe, Bound(i))
+
+		for k := tree.MinChildren - 1; k <= tree.MaxChildren-tree.MinChildren; k++ {
+			j := 0
+
+			node1.entries = make([]entry, 0)
+			node2.entries = make([]entry, 0)
+
+			for j <= k {
+				node1.entries = append(node1.entries, arrNode[j])
+				j++
+			}
+
+			for j := k; j < len(arrNode)-1; j++ {
+				node2.entries = append(node2.entries, arrNode[j+1])
+			}
+
+			emptyEntries := make([]entry, 0)
+
+			summaryBB := node2.computeBoundingBox()
+
+			for _, v := range emptyEntries {
+				summaryBB = boundingBox(summaryBB, v.bb)
+			}
+
+			areaOverlap := node1.computeBoundingBox().Overlap(summaryBB)
+
+			if areaOverlap > areaOverlapMin {
+				continue
+			}
+
+			if areaOverlap < areaOverlapMin {
+				node1min = node1
+				node2min = node2
+
+				areaOverlapMin = areaOverlap
+				continue
+			}
+
+			area := node1.computeBoundingBox().Size() + node2.computeBoundingBox().Size()
+
+			if area >= areaMin {
+				continue
+			}
+
+			node1min = node1
+			node2min = node2
+			areaMin = area
+		}
+	}
+
+	node1min.level = 0
+	node2min.level = 0
+
+	n.copy(node1min)
+	n.parent = parent
+	n.leaf = true
+
+	for _, v := range node1min.entries {
+		if v.obj == nil {
+			panic("hohoh!!!!")
+		}
+	}
+
+	newChild = &node{}
+	newChild.copy(node2min)
+	for _, v := range node2min.entries {
+		if v.obj == nil {
+			panic("hohoh!!!!")
+		}
+	}
+
+	newChild.leaf = true
+
+	if len(parent.entries) < tree.MaxChildren {
+		parent.leaf = false
+		parent.entries = append(parent.entries, entry{newChild.computeBoundingBox(), newChild, nil})
+		newChild.parent = parent
+		newChild.getEntry().bb = newChild.computeBoundingBox()
+		n.getEntry().bb = newChild.computeBoundingBox()
+	} else {
+		tree.splitNodeRStar(parent, newChild)
+	}
+}
+
+func (n *node) copy(newN *node) {
+	n.entries = newN.entries
+	n.leaf = newN.leaf
+	n.parent = newN.parent
+	n.level = newN.level
 }
 
 // getEntry returns a pointer to the entry for the node n from n's parent.
@@ -437,6 +984,7 @@ func (n *node) getEntry() *entry {
 			break
 		}
 	}
+
 	return e
 }
 
@@ -452,51 +1000,51 @@ func (n *node) computeBoundingBox() (bb *Rect) {
 
 // split splits a node into two groups while attempting to minimize the
 // bounding-box area of the resulting groups.
-func (n *node) split(minGroupSize int) (left, right *node) {
-	// find the initial split
-	l, r := n.pickSeeds()
-	leftSeed, rightSeed := n.entries[l], n.entries[r]
+// func (n *node) split(minGroupSize int) (left, right *node) {
+// 	// find the initial split
+// 	l, r := n.pickSeeds()
+// 	leftSeed, rightSeed := n.entries[l], n.entries[r]
 
-	// get the entries to be divided between left and right
-	remaining := append(n.entries[:l], n.entries[l+1:r]...)
-	remaining = append(remaining, n.entries[r+1:]...)
+// 	// get the entries to be divided between left and right
+// 	remaining := append(n.entries[:l], n.entries[l+1:r]...)
+// 	remaining = append(remaining, n.entries[r+1:]...)
 
-	// setup the new split nodes, but re-use n as the left node
-	left = n
-	left.entries = []entry{leftSeed}
-	right = &node{
-		parent:  n.parent,
-		leaf:    n.leaf,
-		level:   n.level,
-		entries: []entry{rightSeed},
-	}
+// 	// setup the new split nodes, but re-use n as the left node
+// 	left = n
+// 	left.entries = []entry{leftSeed}
+// 	right = &node{
+// 		parent:  n.parent,
+// 		leaf:    n.leaf,
+// 		level:   n.level,
+// 		entries: []entry{rightSeed},
+// 	}
 
-	// TODO
-	if rightSeed.child != nil {
-		rightSeed.child.parent = right
-	}
-	if leftSeed.child != nil {
-		leftSeed.child.parent = left
-	}
+// 	// TODO
+// 	if rightSeed.child != nil {
+// 		rightSeed.child.parent = right
+// 	}
+// 	if leftSeed.child != nil {
+// 		leftSeed.child.parent = left
+// 	}
 
-	// distribute all of n's old entries into left and right.
-	for len(remaining) > 0 {
-		next := pickNext(left, right, remaining)
-		e := remaining[next]
+// 	// distribute all of n's old entries into left and right.
+// 	for len(remaining) > 0 {
+// 		next := pickNext(left, right, remaining)
+// 		e := remaining[next]
 
-		if len(remaining)+len(left.entries) <= minGroupSize {
-			assign(e, left)
-		} else if len(remaining)+len(right.entries) <= minGroupSize {
-			assign(e, right)
-		} else {
-			assignGroup(e, left, right)
-		}
+// 		if len(remaining)+len(left.entries) <= minGroupSize {
+// 			assign(e, left)
+// 		} else if len(remaining)+len(right.entries) <= minGroupSize {
+// 			assign(e, right)
+// 		} else {
+// 			assignGroup(e, left, right)
+// 		}
 
-		remaining = append(remaining[:next], remaining[next+1:]...)
-	}
+// 		remaining = append(remaining[:next], remaining[next+1:]...)
+// 	}
 
-	return
-}
+// 	return
+// }
 
 // getAllBoundingBoxes traverses tree populating slice of bounding boxes of non-leaf nodes.
 func (n *node) getAllBoundingBoxes() []*Rect {
@@ -672,7 +1220,7 @@ func (tree *Rtree) condenseTree(n *node) {
 				}
 			}
 			if len(n.parent.entries) == len(entries) {
-				panic(fmt.Errorf("Failed to remove entry from parent"))
+				panic(fmt.Errorf("failed to remove entry from parent"))
 			}
 			n.parent.entries = entries
 
@@ -700,7 +1248,7 @@ func (tree *Rtree) condenseTree(n *node) {
 // Implemented per Section 3.1 of "R-trees: A Dynamic Index Structure for
 // Spatial Searching" by A. Guttman, Proceedings of ACM SIGMOD, p. 47-57, 1984.
 func (tree *Rtree) SearchIntersect(bb *Rect, filters ...Filter) []Spatial {
-	return tree.searchIntersect([]Spatial{}, tree.root, bb)
+	return tree.searchIntersect(&[]Spatial{}, tree.root, bb)
 }
 
 // SearchIntersectWithLimit is similar to SearchIntersect, but returns
@@ -718,7 +1266,7 @@ func (tree *Rtree) SearchIntersectWithLimit(k int, bb *Rect) []Spatial {
 	return tree.SearchIntersect(bb, LimitFilter(k))
 }
 
-func (tree *Rtree) searchIntersect(results []Spatial, n *node, bb *Rect) []Spatial {
+func (tree *Rtree) searchIntersect(results *([]Spatial), n *node, bb *Rect) []Spatial {
 	for _, e := range n.entries {
 		if !intersect(e.bb, bb) {
 			continue
@@ -729,10 +1277,9 @@ func (tree *Rtree) searchIntersect(results []Spatial, n *node, bb *Rect) []Spati
 			continue
 		}
 
-		results = append(results, e.obj)
-
+		*results = append(*results, e.obj)
 	}
-	return results
+	return *results
 }
 
 // NearestNeighbor returns the closest object to the specified point.
