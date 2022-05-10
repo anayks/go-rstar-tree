@@ -147,3 +147,8 @@ License
 
 rtreego is released under a BSD-style license, described in the `LICENSE` file.
 rstar_treego is realesed under a BSD-style license too, described in the `LICENSE` file.
+
+Протестировать библиотеку:
+------------------------------
+Сервер: https://github.com/anayks/rstar_treego-polygon
+Клиент: https://github.com/anayks/go-web-client-r-sync
