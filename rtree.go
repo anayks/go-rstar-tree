@@ -831,6 +831,7 @@ func (tree *Rtree) splitNodeRStar(n *node, nn *node) {
 	}
 
 	if len(parent.entries) < tree.MaxChildren {
+		newChild.parent = parent
 		newEntry := entry{newChild.computeBoundingBox(), newChild, nil}
 		parent.entries = append(parent.entries, newEntry)
 		n.getEntry().bb = newChild.computeBoundingBox()
@@ -941,19 +942,9 @@ func (tree *Rtree) splitNodeRStarByObject(n *node, e entry) {
 	n.parent = parent
 	n.leaf = true
 
-	for _, v := range node1min.entries {
-		if v.obj == nil {
-			panic("hohoh!!!!")
-		}
-	}
-
 	newChild = &node{}
 	newChild.copy(node2min)
-	for _, v := range node2min.entries {
-		if v.obj == nil {
-			panic("hohoh!!!!")
-		}
-	}
+	newChild.parent = parent
 
 	newChild.leaf = true
 
