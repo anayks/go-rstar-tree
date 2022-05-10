@@ -23,10 +23,10 @@ R*-tree - это подвид алгоритма R-tree, более эффект
 Начало работы
 ---------------
 
-Get the source code from [GitHub](https://github.com/anayks/go-rstar-tree) or,
-with Go 1 installed, run `go get github.com/anayks/go-rstar-tree`.
+Скачать исходный код с помощью [GitHub](https://github.com/anayks/go-rstar-tree) или
+с помощью одной установки Go, запустите `go get github.com/anayks/go-rstar-tree`.
 
-Make sure you `import github.com/anayks/go-rstar-tree` in your Go source files.
+Убедитесь, что вы импортировали `import github.com/anayks/go-rstar-tree` в ваших исходных файлах.
 
 Документация
 -------------
