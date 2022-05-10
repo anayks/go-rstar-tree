@@ -1,174 +1,115 @@
-rtreego
+rstar_treego
 =======
 
-A library for efficiently storing and querying spatial data
-in the Go programming language.
+Программа разработана на языке Go.
+За основу взята библиотека dhconnelly. 
+(Огромное спасибо за труд, dhconnelly!)
 
-[![CI](https://github.com/dhconnelly/rtreego/actions/workflows/go.yml/badge.svg)](https://github.com/dhconnelly/rtreego/actions/workflows/go.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/dhconnelly/rtreego)](https://goreportcard.com/report/github.com/dhconnelly/rtreego)
-[![GoDoc](https://godoc.org/github.com/dhconnelly/rtreego?status.svg)](https://godoc.org/github.com/dhconnelly/rtreego)
+[![Author of the basic R-tree](github.com/dhconnelly/)](https://github.com/dhconnelly/)
 
-About
+О библиотеке:
 -----
 
-The R-tree is a popular data structure for efficiently storing and
-querying spatial objects; one common use is implementing geospatial
-indexes in database management systems. Both bounding-box queries
-and k-nearest-neighbor queries are supported.
+Если Вы знакомы с R-tree и не знакомы с R*-tree, объясню простымы словами.
 
-R-trees are balanced, so maximum tree height is guaranteed to be
-logarithmic in the number of entries; however, good worst-case
-performance is not guaranteed.  Instead, a number of rebalancing
-heuristics are applied that perform well in practice.  For more
-details please refer to the references.
+R*-tree - это подвид алгоритма R-tree, более эффективное решение 
+хранения пространственных данных ДЛЯ ПОИСКА. R*-tree балансируется по
+сторонам, уменьшает перекрытие между областями и уменьшает площадь
+покрытия веток и деревьев, чтобы можно было искать эффективно.
 
-This implementation handles the general N-dimensional case; for a more
-efficient implementation for the 3-dimensional case, see [Patrick
-Higgins' fork](https://github.com/patrick-higgins/rtreego).
+Для изменений данных в дереве требуется, по сравнению с обычным R-tree, 
+больше времени, одна поиск, наоборот, занимает меньше времени.
 
-Getting Started
+Начало работы
 ---------------
 
-Get the source code from [GitHub](https://github.com/dhconnelly/rtreego) or,
-with Go 1 installed, run `go get github.com/dhconnelly/rtreego`.
+Get the source code from [GitHub](https://github.com/anayks/go-rstar-tree) or,
+with Go 1 installed, run `go get github.com/anayks/go-rstar-tree`.
 
-Make sure you `import github.com/dhconnelly/rtreego` in your Go source files.
+Make sure you `import github.com/anayks/go-rstar-tree` in your Go source files.
 
-Documentation
+Документация
 -------------
 
-### Storing, updating, and deleting objects
+### Запросы поиска и вставка в дерево
 
-To create a new tree, specify the number of spatial dimensions and the minimum
-and maximum branching factor:
+Чтобы создать новое дерево, используйте функцию, в которой идут параметры:
+	1. Количество измерений
+	2. Минимальное количество элементов на ветке
+	3. Максимальное количество элементов на ветке
 
-    rt := rtreego.NewTree(2, 25, 50)
+  rt := rtreego.NewTree(2, 25, 50)
 
-You can also bulk-load the tree when creating it by passing the objects as
-a parameter.
+Любой тип данных, который имплементирует интерфейс `Spatial` может быть помещен в дерево:
 
-    rt := rtreego.NewTree(2, 25, 50, objects...)
+	type Spatial interface {
+		Bounds() *Rect
+	}
 
-Any type that implements the `Spatial` interface can be stored in the tree:
+`Rect` (прямоугольник) это структура данных для предоставления пространственных данных, 
+в то время как `Point` (точка) показывает лишь пространственно положение. 
+Создать `Point` легко - это просто слайс из `float64`:
 
-    type Spatial interface {
-      Bounds() *Rect
-    }
+	p1 := rtreego.Point{0.4, 0.5}
+	p2 := rtreego.Point{6.2, -3.4}
 
-`Rect`s are data structures for representing spatial objects, while `Point`s
-represent spatial locations.  Creating `Point`s is easy--they're just slices
-of `float64`s:
+Чтобы создать `Rect`, нужно поместить туда позицию и задать длину его сторон:
 
-    p1 := rtreego.Point{0.4, 0.5}
-    p2 := rtreego.Point{6.2, -3.4}
+	r1, _ := rtreego.NewRect(p1, []float64{1, 2})
+	r2, _ := rtreego.NewRect(p2, []float64{1.7, 2.7})
 
-To create a `Rect`, specify a location and the lengths of the sides:
+Давайте продемонстрирую, создав и сохранив некоторые тестовые данные
 
-    r1, _ := rtreego.NewRect(p1, []float64{1, 2})
-    r2, _ := rtreego.NewRect(p2, []float64{1.7, 2.7})
+	type Thing struct {
+		where *Rect
+		name string
+	}
 
-To demonstrate, let's create and store some test data.
+	func (t *Thing) Bounds() *Rect {
+		return t.where
+	}
 
-    type Thing struct {
-      where *Rect
-      name string
-    }
+	rt.Insert(&Thing{r1, "foo"})
+	rt.Insert(&Thing{r2, "bar"})
 
-    func (t *Thing) Bounds() *Rect {
-      return t.where
-    }
+	size := rt.Size() // returns 2
 
-    rt.Insert(&Thing{r1, "foo"})
-    rt.Insert(&Thing{r2, "bar"})
+Мы можем помещать данные в любом порядке
 
-    size := rt.Size() // returns 2
+  rt.Insert(anotherThing)
 
-We can insert and delete objects from the tree in any order.
+Если вы хотите хранить Точку вместо прямоугольника, Вы легко можете
+конвертировать точку в прямоугольник, используя метод `ToRect`
 
-    rt.Delete(thing2)
-    // do some stuff...
-    rt.Insert(anotherThing)
+	var tol = 0.01
 
-Note that ```Delete``` function does the equality comparison by comparing the
-memory addresses of the objects. If you do not have a pointer to the original
-object anymore, you can define a custom comparator.
+	type Somewhere struct {
+		location rtreego.Point
+		name string
+		wormhole chan int
+	}
 
-    type Comparator func(obj1, obj2 Spatial) (equal bool)
+	func (s *Somewhere) Bounds() *Rect {
+		// define the bounds of s to be a rectangle centered at s.location
+		// with side lengths 2 * tol:
+		return s.location.ToRect(tol)
+	}
 
-You can use a custom comparator with ```DeleteWithComparator``` function.
+	rt.Insert(&Somewhere{rtreego.Point{0, 0}, "Где-нибудь", nil})
 
-    cmp := func(obj1, obj2 Spatial) bool {
-      sp1 := obj1.(*IDRect)
-      sp2 := obj2.(*IDRect)
+### Запросы
 
-      return sp1.ID == sp2.ID
-    }
+Запросы поиска по месту требуют использовать `*Rect`. Этот метод вернет
+все возможные элементы, которые находятся внутри или хотя бы прикасаются
+к указанному прямоугольнику
 
-    rt.DeleteWithComparator(obj, cmp)
+	bb, _ := rtreego.NewRect(rtreego.Point{1.7, -3.4}, []float64{3.2, 1.9})
 
-If you want to store points instead of rectangles, you can easily convert a
-point into a rectangle using the `ToRect` method:
+	results := rt.SearchIntersect(bb)
 
-    var tol = 0.01
+### Больше информации
 
-    type Somewhere struct {
-      location rtreego.Point
-      name string
-      wormhole chan int
-    }
-
-    func (s *Somewhere) Bounds() *Rect {
-      // define the bounds of s to be a rectangle centered at s.location
-      // with side lengths 2 * tol:
-      return s.location.ToRect(tol)
-    }
-
-    rt.Insert(&Somewhere{rtreego.Point{0, 0}, "Someplace", nil})
-
-If you want to update the location of an object, you must delete it, update it,
-and re-insert.  Just modifying the object so that the `*Rect` returned by
-`Location()` changes, without deleting and re-inserting the object, will
-corrupt the tree.
-
-### Queries
-
-Bounding-box and k-nearest-neighbors queries are supported.
-
-Bounding-box queries require a search `*Rect`. It returns all objects that
-touch the search rectangle.
-
-    bb, _ := rtreego.NewRect(rtreego.Point{1.7, -3.4}, []float64{3.2, 1.9})
-
-    // Get a slice of the objects in rt that intersect bb:
-    results := rt.SearchIntersect(bb)
-
-### Filters
-
-You can filter out values during searches by implementing Filter functions.
-
-    type Filter func(results []Spatial, object Spatial) (refuse, abort bool)
-
-A filter for limiting results by result count is included in the package for
-backwards compatibility.
-
-    // maximum of three results will be returned
-    tree.SearchIntersect(bb, LimitFilter(3))
-
-Nearest-neighbor queries find the objects in a tree closest to a specified
-query point.
-
-    q := rtreego.Point{6.5, -2.47}
-    k := 5
-
-    // Get a slice of the k objects in rt closest to q:
-    results = rt.NearestNeighbors(k, q)
-
-### More information
-
-See [GoDoc](http://godoc.org/github.com/dhconnelly/rtreego) for full API
-documentation.
-
-References
+Ссылки
 ----------
 
 - A. Guttman.  R-trees: A Dynamic Index Structure for Spatial Searching.
@@ -184,13 +125,25 @@ References
   SIGMOD, pages 71-79, 1995.
   http://www.postgis.org/support/nearestneighbor.pdf
 
-Author
+- R*-tree или индексация геопространственных данных
+	rayz_razko, 2 июня 2014 в 19:27
+	https://habr.com/ru/post/224965/
+
+- rtreego
+	dhconnelly, released 28 Aug 2021
+	https://github.com/dhconnelly/rtreego/releases
+
+- R*-tree
+	https://en.wikipediam.org/wiki/R*-tree
+
+Авторы
 ------
 
-Written by [Daniel Connelly](http://dhconnelly.com) (<dhconnelly@gmail.com>).
+R-tree written by [Daniel Connelly](http://dhconnelly.com) (<dhconnelly@gmail.com>).
+R*-tree с R-tree модифицирован [Даниловым Кириллом][https://t.me/anaykskd] (<anayks@yandex.ru>)
 
 License
 -------
 
-rtreego is released under a BSD-style license, described in the `LICENSE`
-file.
+rtreego is released under a BSD-style license, described in the `LICENSE` file.
+rstar_treego is realesed under a BSD-style license too, described in the `LICENSE` file.
