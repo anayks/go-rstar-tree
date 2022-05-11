@@ -146,7 +146,7 @@ License
 -------
 
 rtreego is released under a BSD-style license, described in the `LICENSE` file.
-rstar_treego is realesed under a BSD-style license too, described in the `LICENSE` file.
+rstar_treego is released under a BSD-style license too, described in the `LICENSE` file.
 
 Протестировать библиотеку:
 ------------------------------
