@@ -134,7 +134,7 @@ R*-tree - это подвид алгоритма R-tree, более эффект
 	https://github.com/dhconnelly/rtreego/releases
 
 - R*-tree
-	https://en.wikipediam.org/wiki/R*-tree
+	https://en.wikipedia.org/wiki/R*-tree
 
 Авторы
 ------
